@@ -3,6 +3,5 @@ __pycache__/
 *.pyc
 .env
 models/saved/
-results/
 data/Historical Data/
 data/azure_dataset/
