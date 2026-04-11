@@ -81,7 +81,7 @@ def plot_emission_bars(results: dict, output_dir: str = "results"):
     for bar in bars:
         yval = bar.get_height()
         plt.text(bar.get_x() + bar.get_width()/2, yval + (max(emissions)*0.01), 
-                 f"{yval:.0f}", ha='center', va='bottom')
+                 f"{yval:.2f}", ha='center', va='bottom')
                  
     output_path = os.path.join(output_dir, "emissions_bar.png")
     plt.tight_layout()
