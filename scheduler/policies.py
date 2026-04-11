@@ -45,11 +45,12 @@ class GreedyCarbonScheduler(BaseScheduler):
         return best_region, 0
 
 class PredictiveCarbonAwareScheduler(BaseScheduler):
-    def __init__(self, cloud_env, history_data_store, display_models):
+    def __init__(self, cloud_env, history_data_store, display_models, sla_max_delay_hours=SLA_MAX_DELAY_HOURS):
         super().__init__(cloud_env)
         self.data_store = history_data_store
         # Expected dict: {'region_name': CarbonIntensityModel}
         self.models = display_models  
+        self.sla_max_delay_hours = sla_max_delay_hours
 
     def schedule(self, job: Dict[str, Any]) -> tuple[str, int]:
         current_time = self.cloud_env.get_current_time()
@@ -63,10 +64,10 @@ class PredictiveCarbonAwareScheduler(BaseScheduler):
         min_predicted_carbon = float('inf')
         
         # Max delay in seconds
-        max_delay_sec = int(SLA_MAX_DELAY_HOURS * 3600)
+        max_delay_sec = int(self.sla_max_delay_hours * 3600)
         
         # Loop through all possible delay hours within SLA to find the absolute minimum predicted carbon
-        for hour_to_wait in range(int(SLA_MAX_DELAY_HOURS) + 1):
+        for hour_to_wait in range(int(self.sla_max_delay_hours) + 1):
             for region in self.cloud_env.regions_config.keys():
                 
                 # If wait is 0, we check real-time intensity

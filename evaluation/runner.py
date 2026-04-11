@@ -93,7 +93,7 @@ class DataStore:
         hist = df.loc[mask]['carbonIntensity'].tolist()
         return hist
 
-def run_simulation(policy_class, traces_df: pd.DataFrame, sim_start_time: datetime, data_store: DataStore, regions: dict, models=None):
+def run_simulation(policy_class, traces_df: pd.DataFrame, sim_start_time: datetime, data_store: DataStore, regions: dict, models=None, sla=None):
     """Runs a complete simulation for a given policy class."""
     env = simpy.Environment()
     cloud_env = CloudEnvironment(env, sim_start_time, regions)
@@ -102,7 +102,10 @@ def run_simulation(policy_class, traces_df: pd.DataFrame, sim_start_time: dateti
     cloud_env.get_carbon_intensity = data_store.get_real_intensity
     
     if policy_class == PredictiveCarbonAwareScheduler:
-        scheduler = policy_class(cloud_env, data_store, models)
+        if sla is not None:
+            scheduler = policy_class(cloud_env, data_store, models, sla_max_delay_hours=sla)
+        else:
+            scheduler = policy_class(cloud_env, data_store, models)
     elif policy_class == GreedyCarbonScheduler:
         scheduler = policy_class(cloud_env, data_store)
     else:
@@ -142,8 +145,8 @@ def main():
     em_client = ElectricityMapsClient()
     
     scenario_configs = {
-        'multizones': REGIONS,
-        'us_zones': {k: v for k, v in REGIONS.items() if k.startswith('us-')}
+        'us_zones': {k: v for k, v in REGIONS.items() if k.startswith('us-')},
+        'non_us_zones': {k: v for k, v in REGIONS.items() if not k.startswith('us-')}
     }
     
     policies = {
@@ -155,42 +158,46 @@ def main():
 
     import shutil
 
-    for scenario_name, scenario_regions in scenario_configs.items():
-        print(f"\n========== Running Scenario: {scenario_name} ==========")
-        data_store = DataStore(em_client, sim_start_time, scenario_regions)
-        
-        models = {}
-        print("Loading Pretrained Forecasting Models...")
-        for region in scenario_regions.keys():
-            models[region] = CarbonIntensityModel(use_lstm=True, sequence_length=24)
-            model_path = os.path.join("models", "saved", f"lstm_{region}")
+    sla_values = [1.0, 6.0, 12.0, 24.0]
+
+    for sla in sla_values:
+        for scenario_name, scenario_regions in scenario_configs.items():
+            run_name = f"{scenario_name}_sla_{int(sla)}h"
+            print(f"\n========== Running Scenario: {run_name} ==========")
+            data_store = DataStore(em_client, sim_start_time, scenario_regions)
             
-            if models[region].load_model(model_path):
-                print(f"[{region}] Successfully loaded pre-trained LSTM model from disk!")
-            else:
-                raise FileNotFoundError(
-                    f"[{region}] No saved model found at {model_path}. "
-                    f"You must run 'python3 train_models.py' first before running evaluations!"
-                )
+            models = {}
+            print("Loading Pretrained Forecasting Models...")
+            for region in scenario_regions.keys():
+                models[region] = CarbonIntensityModel(use_lstm=True, sequence_length=24)
+                model_path = os.path.join("models", "saved", f"lstm_{region}")
+                
+                if models[region].load_model(model_path):
+                    print(f"[{region}] Successfully loaded pre-trained LSTM model from disk!")
+                else:
+                    raise FileNotFoundError(
+                        f"[{region}] No saved model found at {model_path}. "
+                        f"You must run 'python3 train_models.py' first before running evaluations!"
+                    )
+                
+            results = {}
+            for name, policy_class in policies.items():
+                completed_jobs = run_simulation(policy_class, traces_df, sim_start_time, data_store, scenario_regions, models, sla=sla)
+                kpis = calculate_kpis(completed_jobs)
+                results[name] = kpis
+                print_kpis(name, kpis)
+                
+            print(f"Generating Visualizations for {run_name}...")
             
-        results = {}
-        for name, policy_class in policies.items():
-            completed_jobs = run_simulation(policy_class, traces_df, sim_start_time, data_store, scenario_regions, models)
-            kpis = calculate_kpis(completed_jobs)
-            results[name] = kpis
-            print_kpis(name, kpis)
-            
-        print(f"Generating Visualizations for {scenario_name}...")
-        
-        plot_pareto_front(results, output_dir="results")
-        if os.path.exists(os.path.join("results", "pareto_front.png")):
-            shutil.move(os.path.join("results", "pareto_front.png"), 
-                        os.path.join("results", f"pareto_front_{scenario_name}.png"))
-                        
-        plot_emission_bars(results, output_dir="results")
-        if os.path.exists(os.path.join("results", "emissions_bar.png")):
-            shutil.move(os.path.join("results", "emissions_bar.png"), 
-                        os.path.join("results", f"emissions_bar_{scenario_name}.png"))
+            plot_pareto_front(results, output_dir="results")
+            if os.path.exists(os.path.join("results", "pareto_front.png")):
+                shutil.move(os.path.join("results", "pareto_front.png"), 
+                            os.path.join("results", f"pareto_front_{run_name}.png"))
+                            
+            plot_emission_bars(results, output_dir="results")
+            if os.path.exists(os.path.join("results", "emissions_bar.png")):
+                shutil.move(os.path.join("results", "emissions_bar.png"), 
+                            os.path.join("results", f"emissions_bar_{run_name}.png"))
 
     print("\nDone! Charts are saved in the 'results' folder.")
 
