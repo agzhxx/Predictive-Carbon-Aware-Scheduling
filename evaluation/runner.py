@@ -25,12 +25,12 @@ from models.forecaster import CarbonIntensityModel
 import glob
 
 class DataStore:
-    def __init__(self, client: ElectricityMapsClient, start_time: datetime):
+    def __init__(self, client: ElectricityMapsClient, start_time: datetime, regions: dict):
         self.history = {}
         self.start_time = start_time
         
         print("Initializing Carbon Data for Simulator...")
-        for region, info in REGIONS.items():
+        for region, info in regions.items():
             zone = info['electricity_maps_zone']
             
             # Use glob to find ALL CSV files mapping to this zone under data/Historical Data (2021, 2025, etc.)
@@ -93,10 +93,10 @@ class DataStore:
         hist = df.loc[mask]['carbonIntensity'].tolist()
         return hist
 
-def run_simulation(policy_class, traces_df: pd.DataFrame, sim_start_time: datetime, data_store: DataStore, models=None):
+def run_simulation(policy_class, traces_df: pd.DataFrame, sim_start_time: datetime, data_store: DataStore, regions: dict, models=None):
     """Runs a complete simulation for a given policy class."""
     env = simpy.Environment()
-    cloud_env = CloudEnvironment(env, sim_start_time, REGIONS)
+    cloud_env = CloudEnvironment(env, sim_start_time, regions)
     
     # Overwrite cloud_env's carbon lookup with our realistic datastore
     cloud_env.get_carbon_intensity = data_store.get_real_intensity
@@ -138,45 +138,61 @@ def main():
         
     print(f"Simulating {len(traces_df)} jobs.")
     
-    # 2. Setup Carbon Data Provider
+    # 2. Setup Scenarios
     em_client = ElectricityMapsClient()
-    data_store = DataStore(em_client, sim_start_time)
     
-    # 3. Load Pre-trained Forecasting Models
-    models = {}
-    print("Loading Pretrained Forecasting Models...")
-    for region in REGIONS.keys():
-        models[region] = CarbonIntensityModel(use_lstm=True, sequence_length=24)
-        model_path = os.path.join("models", "saved", f"lstm_{region}")
-        
-        if models[region].load_model(model_path):
-            print(f"[{region}] Successfully loaded pre-trained LSTM model from disk!")
-        else:
-            raise FileNotFoundError(
-                f"[{region}] No saved model found at {model_path}. "
-                f"You must run 'python3 train_models.py' first before running evaluations!"
-            )
-        
-    # 4. Run Scenarios
+    scenario_configs = {
+        'multizones': REGIONS,
+        'us_zones': {k: v for k, v in REGIONS.items() if k.startswith('us-')}
+    }
+    
     policies = {
         'Baseline (Latency)': LatencyOptimizedScheduler,
         'Cost Optimized': CostOptimizedScheduler,
         'Greedy Carbon': GreedyCarbonScheduler,
         'Predictive Carbon': PredictiveCarbonAwareScheduler
     }
-    
-    results = {}
-    for name, policy_class in policies.items():
-        completed_jobs = run_simulation(policy_class, traces_df, sim_start_time, data_store, models)
-        kpis = calculate_kpis(completed_jobs)
-        results[name] = kpis
-        print_kpis(name, kpis)
+
+    import shutil
+
+    for scenario_name, scenario_regions in scenario_configs.items():
+        print(f"\n========== Running Scenario: {scenario_name} ==========")
+        data_store = DataStore(em_client, sim_start_time, scenario_regions)
         
-    # 5. Visualize
-    print("Generating Visualizations...")
-    plot_pareto_front(results)
-    plot_emission_bars(results)
-    print("Done! Charts are saved in the 'results' folder.")
+        models = {}
+        print("Loading Pretrained Forecasting Models...")
+        for region in scenario_regions.keys():
+            models[region] = CarbonIntensityModel(use_lstm=True, sequence_length=24)
+            model_path = os.path.join("models", "saved", f"lstm_{region}")
+            
+            if models[region].load_model(model_path):
+                print(f"[{region}] Successfully loaded pre-trained LSTM model from disk!")
+            else:
+                raise FileNotFoundError(
+                    f"[{region}] No saved model found at {model_path}. "
+                    f"You must run 'python3 train_models.py' first before running evaluations!"
+                )
+            
+        results = {}
+        for name, policy_class in policies.items():
+            completed_jobs = run_simulation(policy_class, traces_df, sim_start_time, data_store, scenario_regions, models)
+            kpis = calculate_kpis(completed_jobs)
+            results[name] = kpis
+            print_kpis(name, kpis)
+            
+        print(f"Generating Visualizations for {scenario_name}...")
+        
+        plot_pareto_front(results, output_dir="results")
+        if os.path.exists(os.path.join("results", "pareto_front.png")):
+            shutil.move(os.path.join("results", "pareto_front.png"), 
+                        os.path.join("results", f"pareto_front_{scenario_name}.png"))
+                        
+        plot_emission_bars(results, output_dir="results")
+        if os.path.exists(os.path.join("results", "emissions_bar.png")):
+            shutil.move(os.path.join("results", "emissions_bar.png"), 
+                        os.path.join("results", f"emissions_bar_{scenario_name}.png"))
+
+    print("\nDone! Charts are saved in the 'results' folder.")
 
 if __name__ == "__main__":
     main()
