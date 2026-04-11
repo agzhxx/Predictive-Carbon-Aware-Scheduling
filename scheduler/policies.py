@@ -65,24 +65,24 @@ class PredictiveCarbonAwareScheduler(BaseScheduler):
         # Max delay in seconds
         max_delay_sec = int(SLA_MAX_DELAY_HOURS * 3600)
         
-        for region in self.cloud_env.regions_config.keys():
-            # Check current intensity locally/remotely
-            now_intensity = self.data_store.get_real_intensity(region, current_time)
-            if now_intensity < min_predicted_carbon:
-                min_predicted_carbon = now_intensity
-                best_region = region
-                best_delay = 0
-            
-            # Predict future intensity (simplified to +1 hour forecast for now)
-            recent_hist = self.data_store.get_recent_history(region, current_time, hours=24)
-            if self.models and region in self.models:
-                predicted_intensity_next_hr = self.models[region].predict(recent_hist)
+        # Loop through all possible delay hours within SLA to find the absolute minimum predicted carbon
+        for hour_to_wait in range(int(SLA_MAX_DELAY_HOURS) + 1):
+            for region in self.cloud_env.regions_config.keys():
                 
-                # If waiting 1 hour yields significantly cleaner energy, choose to wait!
-                # (Assuming SLA allows a 1h wait)
-                if SLA_MAX_DELAY_HOURS >= 1.0 and predicted_intensity_next_hr < min_predicted_carbon:
-                    min_predicted_carbon = predicted_intensity_next_hr
+                # If wait is 0, we check real-time intensity
+                if hour_to_wait == 0:
+                    intensity = self.data_store.get_real_intensity(region, current_time)
+                else:
+                    # Use PyTorch recursive forecasting for future hours
+                    recent_hist = self.data_store.get_recent_history(region, current_time, hours=24)
+                    if self.models and region in self.models:
+                        intensity = self.models[region].predict_multi(recent_hist, steps=hour_to_wait)
+                    else:
+                        intensity = float('inf') # Fallback if model missing
+                
+                if intensity < min_predicted_carbon:
+                    min_predicted_carbon = intensity
                     best_region = region
-                    best_delay = 3600 # 1 hour
+                    best_delay = hour_to_wait * 3600
                     
         return best_region, best_delay

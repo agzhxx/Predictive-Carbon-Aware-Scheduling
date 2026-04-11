@@ -53,17 +53,68 @@ class CarbonIntensityModel:
         loss_fn = nn.MSELoss()
         optimizer = torch.optim.Adam(self.model.parameters(), lr=lr)
 
-        print("Training LSTM Forecaster...")
+        print("Training LSTM Forecaster (with Early Stopping)...")
+        best_loss = float('inf')
+        patience = 5
+        trigger_times = 0
+        best_model_state = None
+
         for epoch in range(epochs):
+            total_loss = 0
+            self.model.train()
             for batch_X, batch_y in loader:
                 optimizer.zero_grad()
                 y_pred = self.model(batch_X)
                 loss = loss_fn(y_pred, batch_y)
                 loss.backward()
                 optimizer.step()
+                total_loss += loss.item()
             
+            avg_loss = total_loss / len(loader)
+            
+            # Early Stopping logic
+            if avg_loss < best_loss:
+                best_loss = avg_loss
+                trigger_times = 0
+                best_model_state = self.model.state_dict()
+            else:
+                trigger_times += 1
+                if trigger_times >= patience:
+                    print(f"Early stopping triggered at epoch {epoch}. Best Loss: {best_loss:.4f}")
+                    self.model.load_state_dict(best_model_state)
+                    break
+
             if epoch % 10 == 0:
-                print(f"Epoch {epoch} Loss: {loss.item():.4f}")
+                print(f"Epoch {epoch} Avg Loss: {avg_loss:.4f}")
+
+    def predict_multi(self, recent_history: list, steps: int = 1) -> float:
+        """
+        Predicts the carbon intensity 'steps' hours into the future using recursive forecasting.
+        """
+        if not self.use_lstm:
+            return float(np.mean(recent_history[-self.sequence_length:]))
+
+        if self.model is None:
+            raise ValueError("Model is not trained. Call train() first.")
+
+        # Copy history so we don't mutate input
+        hist = list(recent_history[-self.sequence_length:])
+        if len(hist) < self.sequence_length:
+            hist = [hist[0]] * (self.sequence_length - len(hist)) + hist
+
+        self.model.eval()
+        last_pred = 0
+        
+        with torch.no_grad():
+            for _ in range(steps):
+                scaled_hist = self.scaler.transform(np.array(hist[-self.sequence_length:]).reshape(-1, 1))
+                x_tensor = torch.FloatTensor(scaled_hist).unsqueeze(0)
+                pred_scaled = self.model(x_tensor).item()
+                last_pred = self.scaler.inverse_transform([[pred_scaled]])[0][0]
+                # Feed prediction back into history for recursive step
+                hist.append(last_pred)
+                
+        return float(last_pred)
 
     def save_model(self, base_path: str):
         """Saves the PyTorch model state and the data scaler."""

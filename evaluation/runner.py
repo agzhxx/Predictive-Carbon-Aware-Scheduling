@@ -132,7 +132,7 @@ def main():
     sim_start_time = traces_df['timestamp'].min()
     
     # Trim to run faster for demonstration
-    max_jobs = 10000
+    max_jobs = 1000
     if len(traces_df) > max_jobs:
         traces_df = traces_df.head(max_jobs)
         

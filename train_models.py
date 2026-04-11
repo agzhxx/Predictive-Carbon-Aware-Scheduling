@@ -19,7 +19,7 @@ def main():
     # Dummy start time just to initialize the DataStore
     data_store = DataStore(client, datetime.now())
     
-    epochs = 150 # High epoch count for accurate convergence
+    epochs = 150 # Base limit, Early Stopping will likely halt training sooner for efficiency
     
     # 2. Train and Save Models
     for region in REGIONS.keys():
