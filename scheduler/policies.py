@@ -1,6 +1,6 @@
 from typing import Dict, Any, List
 from datetime import datetime
-from simulator.config import REGIONS, SLA_MAX_DELAY_HOURS
+from simulator.config import SLA_MAX_DELAY_HOURS
 
 class BaseScheduler:
     def __init__(self, cloud_env):
@@ -21,7 +21,7 @@ class LatencyOptimizedScheduler(BaseScheduler):
 class CostOptimizedScheduler(BaseScheduler):
     def schedule(self, job: Dict[str, Any]) -> tuple[str, int]:
         # Spatial shifting: Find the cheapest region
-        cheapest_region = min(REGIONS.keys(), key=lambda r: REGIONS[r]['cost_multiplier'])
+        cheapest_region = min(self.cloud_env.regions_config.keys(), key=lambda r: self.cloud_env.regions_config[r]['cost_multiplier'])
         return cheapest_region, 0
 
 class GreedyCarbonScheduler(BaseScheduler):
@@ -36,7 +36,7 @@ class GreedyCarbonScheduler(BaseScheduler):
         best_region = 'us-west-1'
         min_carbon = float('inf')
         
-        for region in REGIONS.keys():
+        for region in self.cloud_env.regions_config.keys():
             intensity = self.data_store.get_real_intensity(region, current_time)
             if intensity < min_carbon:
                 min_carbon = intensity
@@ -65,7 +65,7 @@ class PredictiveCarbonAwareScheduler(BaseScheduler):
         # Max delay in seconds
         max_delay_sec = int(SLA_MAX_DELAY_HOURS * 3600)
         
-        for region in REGIONS.keys():
+        for region in self.cloud_env.regions_config.keys():
             # Check current intensity locally/remotely
             now_intensity = self.data_store.get_real_intensity(region, current_time)
             if now_intensity < min_predicted_carbon:
