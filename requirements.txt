@@ -1,7 +1,9 @@
 pandas
+numpy
 scikit-learn
 torch
 simpy
 matplotlib
 requests
 python-dotenv
+joblib

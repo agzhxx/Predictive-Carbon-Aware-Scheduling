@@ -17,7 +17,7 @@ def main():
     # 1. Initialize data store
     client = ElectricityMapsClient()
     # Dummy start time just to initialize the DataStore
-    data_store = DataStore(client, datetime.now())
+    data_store = DataStore(client, datetime.now(), REGIONS)
     
     epochs = 150 # Base limit, Early Stopping will likely halt training sooner for efficiency
     

@@ -1,82 +1,96 @@
-# Predictive Carbon-Aware Scheduling for Multi-Region Serverless Workloads
+# Predictive Carbon-Aware Scheduling: SLA Sensitivity Analysis
 
-This project implements a research-grade simulation framework for optimizing carbon emissions in multi-region serverless environments. It leverages Deep Learning (PyTorch LSTM) to forecast grid carbon intensity and make intelligent scheduling decisions based on both geographic (spatial) and temporal shifting.
+This research project explores the optimization of carbon emissions for multi-region serverless workloads. Using **Deep Learning (PyTorch LSTM)**, the framework predicts grid carbon intensity to determine the optimal balance between **Spatial Shifting** (moving jobs to cleaner regions) and **Temporal Shifting** (delaying jobs until the grid is cleaner).
 
 ## Project Overview
 
-Serverless computing offers scalability but often ignores the environmental impact of where and when code is executed. This project demonstrates how a **Predictive Carbon-Aware Scheduler** can significantly reduce the carbon footprint of cloud workloads by:
-1. **Spatial Shifting**: Routing jobs to the cleanest available region in real-time.
-2. **Temporal Shifting**: Delaying non-urgent jobs to periods when the grid is cleaner (e.g., peak solar/wind hours).
+As cloud computing expands, its environmental impact becomes critical. This project demonstrates a **Predictive Carbon-Aware Scheduler** designed to proactively reduce the carbon footprint of serverless functions. 
+
+The core research focus is **SLA Sensitivity Analysis**: understanding how much carbon we can save if we are allowed to delay non-urgent jobs by 1, 6, 12, or 24 hours.
 
 ## Architecture & Project Structure
 
-The repository is organized into modular components:
+The project is built as a modular simulation environment:
 
-- **`data/`**: Handles data ingestion and loading.
-    - `data_loader.py`: Processes the 300MB+ Azure Function trace logs.
-    - `electricity_maps_client.py`: API client for live grid data (production fallback).
-    - `Historical Data/`: Local storage for multi-year (2021-2025) CSV carbon datasets.
-- **`models/`**: Contains the AI logic.
-    - `forecaster.py`: Defines the `LSTMForecaster` PyTorch model and training wrapper.
-- **`simulator/`**: Core simulation physics.
-    - `config.py`: **Main Configuration**. Add custom regions, define `electricity_maps_zones`, and map them to historical datasets here.
-    - `environment.py`: Models the cloud environment and handles carbon intensity lookups.
-    - `job_queue.py`: Manages event-driven job execution timing.
-- **`scheduler/`**: Contains the 4 logic policies (`policies.py`).
-- **`evaluation/`**: Running the benchmarks.
-    - `runner.py`: The main orchestrator for simulations.
-    - `metrics.py`: Computes KPIs like gCO2eq/job and temporal delay.
-- **`visualization/`**: Generates the Pareto Front and Emission Bar charts.
-- **`train_models.py`**: Standalone script to pre-train LSTM models on historical data.
+- **`data/`**: Logic for processing the 300MB+ **Azure Functions (2021)** trace logs and historical **Electricity Maps (2021-2025)** grid carbon data.
+- **`models/`**: Contains the **PyTorch LSTM** forecasting logic with Early Stopping and recursive multi-step prediction capabilities.
+- **`simulator/`**: An event-driven simulation engine that models job queues, execution latencies, and regional grid intensities.
+    - `config.py`: **Main Configuration**. Define your cloud regions and global SLA baseline here.
+- **`scheduler/`**: Implements four distinct decision policies:
+    - `LatencyOptimized`: Baseline (nearest region, zero delay).
+    - `CostOptimized`: Minimum financial cost (lowest `cost_multiplier`).
+    - `GreedyCarbon`: Minimum carbon based on *current* real-time metrics.
+    - `PredictiveCarbonAware`: Uses ML forecasts to find the absolute carbon minimum within a future SLA window.
+- **`evaluation/`**: Orchestrates the SLA Sensitivity benchmarks and computes KPIs.
+- **`visualization/`**: Generates comparative Pareto Fronts and Emissions Bar charts for different SLA thresholds.
 
 ## Customization
 
-You can easily extend this project with new data:
-1. **Add new regions**: In `simulator/config.py`, add a new entry to the `REGIONS` dictionary.
-2. **Add data**: Place corresponding historical CSVs from Electricity Maps into `data/Historical Data/`. The system uses dynamic glob loading to link datasets to regions.
-3. **Adjust SLAs**: Modify `SLA_MAX_DELAY_HOURS` in `config.py` to test different latency requirements.
+You can dynamically adjust the research parameters in `simulator/config.py`:
+- **Add Regions**: Add new zones to the `REGIONS` map.
+- **Inject History**: Drop hourly CSVs from Electricity Maps into `data/Historical Data/`. The system uses dynamic glob loading to automatically link files to regions.
 
-## Benchmarks
+## Benchmarks & Results
 
-We have evaluated the system across two primary scenarios:
+The current evaluation suite executes a sensitivity analysis across four Service Level Agreements (SLAs): **1h, 6h, 12h, and 24h**. 
 
-1. **Multi-Zone Global Benchmark**: Evaluating the trade-off when high-cleanliness regions (like Sweden) are available globally.
-2. **Single Continent (US-Only) Benchmark**: Simulating data residency constraints (GDPR-like) where the scheduler must rely on temporal shifting within a specific geographical boundary.
+The results demonstrate that while **Spatial Shifting** (Greedy) is powerful, **Predictive Temporal Shifting** becomes the dominant factor in carbon reduction as SLAs become more flexible.
 
-| ![Direct Emisisons Multi-Zone](results/emissions_bar_multizones.png) | ![Pareto Multi-Zone](results/pareto_front_multizones.png) |
+| SLA: 1 Hour | SLA: 12 Hours |
 |:---:|:---:|
-| **Multi-Zone Emissions** | **Multi-Zone Pareto Front** |
+| ![1h](results/emissions_bar_1.png) | ![12h](results/emissions_bar_12.png) |
 
-| ![Emissions US-Only](results/emissions_bar_us_zones.png) | ![Pareto US-Only](results/pareto_front_us_zones.png) |
+| SLA: 6 Hours | SLA: 24 Hours |
 |:---:|:---:|
-| **US-Only Emissions** | **US-Only Pareto Front** |
+| ![6h](results/emissions_bar_6.png) | ![24h](results/emissions_bar_24.png) |
 
-## Setup
+## Setup & Execution
 
-### 1. Prerequisites
-- Python 3.9+
-- `pip install -r requirements.txt`
+### Option A: Docker (Recommended)
 
-### 2. Prepare Data
-Ensure your historical carbon data is placed in `data/Historical Data/`. 
+Build and run the entire project with a single command — no manual dependency installation required. The Docker image automatically unzips the Azure dataset during build.
 
-**Note on Azure Traces**: Due to GitHub's 100MB file size limit, the primary Azure dataset has been compressed into `data/azure_dataset.zip`. You **must** unarchive/unzip this file into the `data/azure_dataset/` directory before running the simulation for the first time.
+```bash
+# Build the image
+docker build -t carbon-scheduler .
 
-### 3. Setup Environment
-Create a `.env` file and add your API key if you wish to fetch live data (optional for simulation):
-```env
-ELECTRICITY_MAPS_API_KEY=your_key_here
+# Train the LSTM models
+docker run --rm -v "$(pwd)/models/saved:/app/models/saved" carbon-scheduler python3 train_models.py
+
+# Run the SLA Sensitivity benchmarks
+docker run --rm -v "$(pwd)/results:/app/results" carbon-scheduler
+
+# Or run both training + evaluation in one go
+docker run --rm \
+  -v "$(pwd)/models/saved:/app/models/saved" \
+  -v "$(pwd)/results:/app/results" \
+  carbon-scheduler sh -c "python3 train_models.py && python3 evaluation/runner.py"
 ```
 
-### 4. Training the Models
-Before running the simulation, train the PyTorch LSTM models on the multi-year history:
+> **Note:** The `-v` volume mounts ensure that trained models and result charts are saved back to your host machine.
+
+### Option B: Local Setup
+
+#### 1. Requirements
+```bash
+python3 -m venv venv
+source venv/bin/activate
+pip install -r requirements.txt
+```
+
+#### 2. Prepare Data
+- Unzip `data/azure_dataset.zip` (compressed due to GitHub's 100MB limit).
+- Ensure historical CSVs are present in `data/Historical Data/`.
+
+#### 3. Training
+Train the LSTM models on the multi-year history (includes Early Stopping):
 ```bash
 python3 train_models.py
 ```
-*This will train the models for 150 epochs and save them to `models/saved/`.*
 
-### 5. Running the Simulation
-Run the evaluation suite to generate metrics and visualization plots:
+#### 4. Running Benchmarks
+Run the SLA Sensitivity suite:
 ```bash
 python3 evaluation/runner.py
 ```
+*Charts and metrics for 1h, 6h, 12h, and 24h will be automatically saved to the `results/` folder.*
