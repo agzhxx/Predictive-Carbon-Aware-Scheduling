@@ -26,24 +26,24 @@ REGIONS = {
         'lat': 32.77, 'lon': -96.79,
         'cost_multiplier': 0.95
     },
-    # 'eu-north-1': {
-    #     'electricity_maps_zone': 'SE-SE3', # Stockholm (Nuclear/Hydro)
-    #     'name': 'Stockholm',
-    #     'lat': 59.33, 'lon': 18.06,
-    #     'cost_multiplier': 0.85
-    # },
-    # 'eu-central-1': {
-    #     'electricity_maps_zone': 'DE', # Frankfurt (Wind/Coal)
-    #     'name': 'Frankfurt',
-    #     'lat': 50.11, 'lon': 8.68,
-    #     'cost_multiplier': 1.05 
-    # },
-    # 'ap-southeast-2': {
-    #     'electricity_maps_zone': 'AU-NSW', # Sydney (Heavy Coal)
-    #     'name': 'Sydney',
-    #     'lat': -33.86, 'lon': 151.20,
-    #     'cost_multiplier': 1.2
-    # }
+    'eu-north-1': {
+        'electricity_maps_zone': 'SE-SE3', # Stockholm (Nuclear/Hydro)
+        'name': 'Stockholm',
+        'lat': 59.33, 'lon': 18.06,
+        'cost_multiplier': 0.85
+    },
+    'eu-central-1': {
+        'electricity_maps_zone': 'DE', # Frankfurt (Wind/Coal)
+        'name': 'Frankfurt',
+        'lat': 50.11, 'lon': 8.68,
+        'cost_multiplier': 1.05 
+    },
+    'ap-southeast-2': {
+        'electricity_maps_zone': 'AU-NSW', # Sydney (Heavy Coal)
+        'name': 'Sydney',
+        'lat': -33.86, 'lon': 151.20,
+        'cost_multiplier': 1.2
+    }
 }
 
 # Strict Service Level Agreement (SLA) threshold
