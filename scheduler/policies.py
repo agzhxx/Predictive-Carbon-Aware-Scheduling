@@ -11,12 +11,14 @@ class BaseScheduler:
         Takes a job. Returns (Target Region, Delay in seconds).
         Default behavior: Schedule immediately in the default region.
         """
-        return 'us-west-1', 0
+        default_region = list(self.cloud_env.regions_config.keys())[0]
+        return default_region, 0
 
 class LatencyOptimizedScheduler(BaseScheduler):
     def schedule(self, job: Dict[str, Any]) -> tuple[str, int]:
-        # Always run immediately in the local/closest region (us-west-1)
-        return 'us-west-1', 0
+        # Always run immediately in the local/closest region (fallback to first available)
+        default_region = list(self.cloud_env.regions_config.keys())[0]
+        return default_region, 0
 
 class CostOptimizedScheduler(BaseScheduler):
     def schedule(self, job: Dict[str, Any]) -> tuple[str, int]:
@@ -33,7 +35,7 @@ class GreedyCarbonScheduler(BaseScheduler):
         # Spatial shifting: Send to the cleanest region right NOW
         current_time = self.cloud_env.get_current_time()
         
-        best_region = 'us-west-1'
+        best_region = list(self.cloud_env.regions_config.keys())[0]
         min_carbon = float('inf')
         
         for region in self.cloud_env.regions_config.keys():
@@ -59,7 +61,7 @@ class PredictiveCarbonAwareScheduler(BaseScheduler):
         # 1. Spatially shifting NOW to another region
         # 2. Temporally shifting LATER (within SLA) in any region
         
-        best_region = 'us-west-1'
+        best_region = list(self.cloud_env.regions_config.keys())[0]
         best_delay = 0
         min_predicted_carbon = float('inf')
         

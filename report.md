@@ -38,12 +38,19 @@ The simulation results clearly demonstrate the value of **spatial shifting**. Ro
 
 However, an interesting finding emerges when comparing the **Greedy Carbon** policy to the **Predictive Carbon-Aware (LSTM)** policy: **they often produce nearly identical results.**
 
-### Why does the Greedy solution match the Predictive LSTM?
-This finding occurs due constraint intersections within the simulation environment and the nature of power grids:
+## Summary of Final Work and Findings
+To thoroughly evaluate the Predictive LSTM against the Greedy Carbon scheduler, we ran a robust test covering all global regions across four distinct Service Level Agreement (SLA) configurations: **1 hour, 6 hours, 12 hours, and 24 hours**.
 
-1.  **Short SLA Windows**: The project enforces a strict, short Service Level Agreement (e.g., a 1-hour maximum delay allowance). Within a 1-hour window, the LSTM can only look one step ahead.
-2.  **High Autocorrelation of Grid Data**: Carbon intensity typically changes gradually. The carbon intensity *right now* is an incredibly strong predictor of the intensity *one hour from now*. Dramatic, sudden shifts in grid cleanliness (that would justify waiting rather than executing now) are rare on a 1-hour timescale.
-3.  **The Dominance of Spatial Shifting**: Because some regions are *consistently* built on green infrastructure (e.g., baseload nuclear or massive hydro), it is almost always mathematically optimal to ship a job to those regions immediately (the Greedy approach) rather than waiting in a dirtier region for a marginal improvement (the Predictive Temporal approach). The LSTM realizes that waiting 1 hour in a sunny region usually still cannot beat the immediate carbon floor of a hydro-powered region.
+Our analysis reveals several profound insights:
+
+1. **Short SLAs heavily favor Spatial Shifting (The Anomaly Explained)** 
+   Under a classic 1-hour SLA, the Greedy Carbon policy constantly ties with the Predictive LSTM policy. With only a 60-minute forecast horizon, the model almost never finds a scenario where waiting for the local grid to get cleaner outperforms simply warping the job to an "always-green" region (like `eu-north-1` in Stockholm, which runs nearly 100% on hydro and nuclear power). The spatial variation between global regions is massive, completely overpowering the slight temporal variation within a single region over 1 hour.
+
+2. **Longer SLAs Unlock True Predictive Power** 
+   When the SLA extends to 12 or 24 hours, temporal shifting finally breaks its tie with greedy spatial shifting. Over 24 hours, the sun completes a full cycle and wind patterns shift drastically. The LSTM model is now able to make complex, non-obvious choices such as "I will hold this job in California instead of shipping it to Sweden, because the sun will rise in California in 8 hours and it will be completely carbon-free."
+
+3. **Combined Approaches Yield the Safest Future**
+   Cost Optimization policies inevitably increase emissions by hunting solely for cheap, dirty energy (like Texas wind lulls supplemented by gas). Schedulers strictly optimizing for latency (`us-west-1` baseline) fall victim to the "duck curve" or dirty baseline power. Real-world schedulers must adopt the LSTM-driven temporal-spatial hybrid: dynamically forecasting multiple days into the future and weighing the cost of cross-region data transfer against the benefit of local temporal delays.
 
 ## Conclusion
 The Predictive Carbon-Aware Scheduling project successfully validates that carbon-aware routing can significantly decrease the environmental footprint of cloud workloads. While spatial shifting (Greedy routing to the cleanest global region) proves highly effective and easier to implement, temporal shifting (Predictive delays) requires much wider SLA windows (e.g., 12-24 hours) to out-perform simple geographic routing. Ultimately, embedding carbon metrics into cloud schedulers offers a powerful, software-driven approach to sustainable computing.

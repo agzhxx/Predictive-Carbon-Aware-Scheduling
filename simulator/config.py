@@ -20,12 +20,6 @@ REGIONS = {
         'lat': 32.77, 'lon': -96.79,
         'cost_multiplier': 0.95
     },
-    'eu-north-1': {
-        'electricity_maps_zone': 'SE-SE3', # Stockholm (Nuclear/Hydro)
-        'name': 'Stockholm',
-        'lat': 59.33, 'lon': 18.06,
-        'cost_multiplier': 0.85
-    },
     'eu-central-1': {
         'electricity_maps_zone': 'DE', # Frankfurt (Wind/Coal)
         'name': 'Frankfurt',
